@@ -66,14 +66,10 @@ static void do_not_move(void *const a,
         .is_unordered = is_unordered
     };
     void *lp = tmp, *rp = a + n1 * s, *res = a;
-    if (n2 > 1) {
-        if (do_not_move_with_tmp(&p, false, n1 * s, n2))
-            memcpy(rp, tmp, n2 * s), moves += n2;
-    }
-    if (n1 > 1) {
-        if (!do_not_move_with_tmp(&p, false, 0, n1))
-            memcpy(tmp, a, n1 * s), moves += n1;
-    }
+    if (n2 > 1 && do_not_move_with_tmp(&p, false, n1 * s, n2))
+        memcpy(rp, tmp, n2 * s), moves += n2;
+    if (n1 < 2 || !do_not_move_with_tmp(&p, false, 0, n1))
+        memcpy(tmp, a, n1 * s), moves += n1;
     while (n1 > 0 && n2 > 0) {
         if (is_unordered(lp, rp))
             memcpy(res, rp, s), rp += s, --n2;
