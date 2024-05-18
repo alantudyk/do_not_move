@@ -4,11 +4,11 @@
 #include <string.h>
 #include <stdio.h>
 
-typedef bool (* is_swap_needed_t)(const void *, const void *);
+typedef bool (*const is_swap_needed_t)(const void *, const void *);
 
 typedef struct param_t {
-    void *a, *tmp;
-    size_t s;
+    void *a, *const tmp;
+    const size_t s;
     is_swap_needed_t is_unordered;
 } param_t;
 
@@ -18,22 +18,21 @@ static bool do_not_move_with_tmp(const param_t *const p,
                                  const bool is_tmp,
                                  const size_t offset,
                                  const size_t n) {
-    bool lb = is_tmp, rb = is_tmp;
-    size_t n1 = n / 2, n2 = n - n1;
     const size_t s = p->s;
-    if (n1 > 1) lb = do_not_move_with_tmp(p, lb, offset, n1);
-    if (n2 > 1) rb = do_not_move_with_tmp(p, rb, offset + n1 * s, n2);
-    void *lp  = (lb ? p->tmp : p->a) + offset,
-         *rp  = (rb ? p->tmp : p->a) + offset + n1 * s,
-         *res = (lb ? p->a : p->tmp) + offset;
+    size_t n1 = n / 2, n2 = n - n1;
+    const bool lb = n1 > 1 ? do_not_move_with_tmp(p, is_tmp, offset, n1) : is_tmp,
+               rb = n2 > 1 ? do_not_move_with_tmp(p, is_tmp, offset + n1 * s, n2) : is_tmp;
+    const void *lp = (lb ? p->tmp : p->a) + offset,
+               *rp = (rb ? p->tmp : p->a) + offset + n1 * s;
+    void *res = (lb ? p->a : p->tmp) + offset;
     is_swap_needed_t is_unordered = p->is_unordered;
-    while (n1 > 0 && n2 > 0) {
+    do {
         if (is_unordered(lp, rp))
             memcpy(res, rp, s), rp += s, --n2;
         else
             memcpy(res, lp, s), lp += s, --n1;
         res += s;
-    }
+    } while (n1 > 0 && n2 > 0);
     moves += n - n2;
     if (n1 > 0)
         memcpy(res, lp, n1 * s);
@@ -64,19 +63,20 @@ static void do_not_move(void *const a,
         .s = s,
         .is_unordered = is_unordered
     };
-    void *lp = tmp, *rp = a + n1 * s, *res = a;
+    const void *lp = tmp, *rp = a + n1 * s;
+    void *res = a;
     if (n2 > 1 && do_not_move_with_tmp(&p, false, 0, n2))
-        memcpy(rp, tmp, n2 * s), moves += n2;
+        memcpy((void *)rp, tmp, n2 * s), moves += n2;
     p.a = a;
     if (n1 < 2 || !do_not_move_with_tmp(&p, false, 0, n1))
         memcpy(tmp, a, n1 * s), moves += n1;
-    while (n1 > 0 && n2 > 0) {
+    do {
         if (is_unordered(lp, rp))
             memcpy(res, rp, s), rp += s, --n2;
         else
             memcpy(res, lp, s), lp += s, --n1;
         res += s;
-    }
+    } while (n1 > 0 && n2 > 0);
     moves += n - n2;
     if (n1 > 0) memcpy(res, lp, n1 * s);
     free(tmp);
@@ -109,7 +109,7 @@ int main(void) {
     // srand(time(NULL));
 
     for (size_t i = 0; i < N; i++) R[i] = A[i] = rand();
-    
+
     do_not_move(A, N, sizeof(int32_t), is_unordered);
 
     qsort(R, N, sizeof(int32_t), cmp);
