@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#define loop for (;;)
+
 typedef bool (*const is_swap_needed_t)(const void *, const void *);
 
 typedef struct param_t {
@@ -18,21 +20,24 @@ static bool do_not_move_with_tmp(const param_t *const p,
                                  const bool is_tmp,
                                  const size_t offset,
                                  const size_t n) {
-    const size_t s = p->s;
     size_t n1 = n / 2, n2 = n - n1;
+    const size_t s = p->s, r_offset = offset + n1 * s;
     const bool lb = n1 > 1 ? do_not_move_with_tmp(p, is_tmp, offset, n1) : is_tmp,
-               rb = n2 > 1 ? do_not_move_with_tmp(p, is_tmp, offset + n1 * s, n2) : is_tmp;
+               rb = n2 > 1 ? do_not_move_with_tmp(p, is_tmp, r_offset, n2) : is_tmp;
     const void *lp = (lb ? p->tmp : p->a) + offset,
-               *rp = (rb ? p->tmp : p->a) + offset + n1 * s;
+               *rp = (rb ? p->tmp : p->a) + r_offset;
     void *res = (lb ? p->a : p->tmp) + offset;
     is_swap_needed_t is_unordered = p->is_unordered;
-    do {
-        if (is_unordered(lp, rp))
-            memcpy(res, rp, s), rp += s, --n2;
-        else
-            memcpy(res, lp, s), lp += s, --n1;
-        res += s;
-    } while (n1 > 0 && n2 > 0);
+#define M_E_R_G_E \
+    loop \
+        if (is_unordered(lp, rp)) { \
+            memcpy(res, rp, s), rp += s; res += s; \
+            if (--n2 == 0) break; \
+        } else { \
+            memcpy(res, lp, s), lp += s, res += s; \
+            if (--n1 == 0) break; \
+        }
+    M_E_R_G_E
     moves += n - n2;
     if (n1 > 0)
         memcpy(res, lp, n1 * s);
@@ -70,13 +75,7 @@ static void do_not_move(void *const a,
     p.a = a;
     if (n1 < 2 || !do_not_move_with_tmp(&p, false, 0, n1))
         memcpy(tmp, a, n1 * s), moves += n1;
-    do {
-        if (is_unordered(lp, rp))
-            memcpy(res, rp, s), rp += s, --n2;
-        else
-            memcpy(res, lp, s), lp += s, --n1;
-        res += s;
-    } while (n1 > 0 && n2 > 0);
+    M_E_R_G_E
     moves += n - n2;
     if (n1 > 0) memcpy(res, lp, n1 * s);
     free(tmp);
