@@ -8,7 +8,7 @@ typedef bool (* is_swap_needed_t)(const void *, const void *);
 
 typedef struct param_t {
     void *a, *tmp;
-    size_t s, rstart;
+    size_t s;
     is_swap_needed_t is_unordered;
 } param_t;
 
@@ -20,12 +20,12 @@ static bool do_not_move_with_tmp(const param_t *const p,
                                  const size_t n) {
     bool lb = is_tmp, rb = is_tmp;
     size_t n1 = n / 2, n2 = n - n1;
-    const size_t s = p->s, tmp_offset = offset - (offset < p->rstart ? 0 : p->rstart);
+    const size_t s = p->s;
     if (n1 > 1) lb = do_not_move_with_tmp(p, lb, offset, n1);
     if (n2 > 1) rb = do_not_move_with_tmp(p, rb, offset + n1 * s, n2);
-    void *lp  = lb ? p->tmp + tmp_offset : p->a + offset,
-         *rp  = (rb ? p->tmp + tmp_offset : p->a + offset) + n1 * s,
-         *res = lb ? p->a + offset : p->tmp + tmp_offset;
+    void *lp  = (lb ? p->tmp : p->a) + offset,
+         *rp  = (rb ? p->tmp : p->a) + offset + n1 * s,
+         *res = (lb ? p->a : p->tmp) + offset;
     is_swap_needed_t is_unordered = p->is_unordered;
     while (n1 > 0 && n2 > 0) {
         if (is_unordered(lp, rp))
@@ -37,7 +37,7 @@ static bool do_not_move_with_tmp(const param_t *const p,
     moves += n - n2;
     if (n1 > 0)
         memcpy(res, lp, n1 * s);
-    else if (n2 > 0 && lb == rb)
+    else if (lb == rb)
         memcpy(res, rp, n2 * s), moves += n2;
     return !lb;
 }
@@ -59,15 +59,15 @@ static void do_not_move(void *const a,
         exit(1);
     }
     param_t p = {
-        .a = a,
+        .a = a + n1 * s,
         .tmp = tmp,
         .s = s,
-        .rstart = n1 * s,
         .is_unordered = is_unordered
     };
     void *lp = tmp, *rp = a + n1 * s, *res = a;
-    if (n2 > 1 && do_not_move_with_tmp(&p, false, n1 * s, n2))
+    if (n2 > 1 && do_not_move_with_tmp(&p, false, 0, n2))
         memcpy(rp, tmp, n2 * s), moves += n2;
+    p.a = a;
     if (n1 < 2 || !do_not_move_with_tmp(&p, false, 0, n1))
         memcpy(tmp, a, n1 * s), moves += n1;
     while (n1 > 0 && n2 > 0) {
