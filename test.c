@@ -17,13 +17,12 @@ typedef struct param_t {
 static size_t comparisons = 0, moves = 0;
 
 static bool do_not_move_with_tmp(const param_t *const p,
-                                 const bool is_tmp,
                                  const size_t offset,
                                  const size_t n) {
     size_t n1 = n / 2, n2 = n - n1;
     const size_t s = p->s, r_offset = offset + n1 * s;
-    const bool lb = n1 > 1 ? do_not_move_with_tmp(p, is_tmp, offset, n1) : is_tmp,
-               rb = n2 > 1 ? do_not_move_with_tmp(p, is_tmp, r_offset, n2) : is_tmp;
+    const bool lb = n1 > 1 && do_not_move_with_tmp(p, offset, n1),
+               rb = n2 > 1 && do_not_move_with_tmp(p, r_offset, n2);
     const void *lp = (lb ? p->tmp : p->a) + offset,
                *rp = (rb ? p->tmp : p->a) + r_offset;
     void *res = (lb ? p->a : p->tmp) + offset;
@@ -70,10 +69,10 @@ static void do_not_move(void *const a,
     };
     const void *lp = tmp, *rp = a + n1 * s;
     void *res = a;
-    if (n2 > 1 && do_not_move_with_tmp(&p, false, 0, n2))
+    if (n2 > 1 && do_not_move_with_tmp(&p, 0, n2))
         memcpy((void *)rp, tmp, n2 * s), moves += n2;
     p.a = a;
-    if (n1 < 2 || !do_not_move_with_tmp(&p, false, 0, n1))
+    if (n1 < 2 || !do_not_move_with_tmp(&p, 0, n1))
         memcpy(tmp, a, n1 * s), moves += n1;
     M_E_R_G_E
     moves += n - n2;
