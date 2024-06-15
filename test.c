@@ -3,7 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
+#define unlikely(x) __builtin_expect(!!(x), 0)
 #define loop for (;;)
 
 typedef bool (*const is_swap_needed_t)(const void *, const void *);
@@ -27,7 +29,7 @@ static bool do_not_move_with_tmp(const param_t *const p,
                *rp = (rb ? p->tmp : p->a) + r_offset;
     void *res = (lb ? p->a : p->tmp) + offset;
     is_swap_needed_t is_unordered = p->is_unordered;
-#define M_E_R_G_E \
+#define M_E_R_G_E(n1, n2) \
     loop \
         if (is_unordered(lp, rp)) { \
             memcpy(res, rp, s), rp += s; res += s; \
@@ -36,7 +38,7 @@ static bool do_not_move_with_tmp(const param_t *const p,
             memcpy(res, lp, s), lp += s, res += s; \
             if (--n1 == 0) break; \
         }
-    M_E_R_G_E
+    M_E_R_G_E(n1, n2)
     moves += n - n2;
     if (n1 > 0)
         memcpy(res, lp, n1 * s);
@@ -45,14 +47,39 @@ static bool do_not_move_with_tmp(const param_t *const p,
     return !lb;
 }
 
+static void memswap(void *a, void *b, const size_t s) {
+    const size_t r = s % sizeof(size_t);
+    const void *const A = a + (s - r);
+    size_t tmp;
+    while (a < A)
+        tmp = *(size_t *)a,
+        *(size_t *)a = *(size_t *)b,
+        *(size_t *)b = tmp,
+        a += s,
+        b += s;
+    memcpy(&tmp, a, r),
+    memcpy(a, b, r),
+    memcpy(b, &tmp, r);
+}
+
 static void do_not_move(void *const a,
                         const size_t n,
                         const size_t s,
                         is_swap_needed_t is_unordered) {
-    if (n < 2) return;
-    size_t n1 = n / 2, n2 = n - n1;
-    void *const tmp = malloc(n2 * s);
-    if (__builtin_expect(tmp == NULL, 0)) {
+    if (unlikely(n < 4)) {
+        if (n < 2) return;
+        if (is_unordered(a, a + s))
+            memswap(a, a + s, s), moves += 2;
+        if (n == 3 && is_unordered(a + s, a + s * 2)) {
+            memswap(a + s, a + s * 2, s), moves += 2;
+            if (is_unordered(a, a + s))
+                memswap(a, a + s, s), moves += 2;
+        }
+        return;
+    }
+    size_t n12 = n / 2, n34 = n - n12;
+    void *const tmp = malloc(n34 * s);
+    if (unlikely(tmp == NULL)) {
         printf(
             "\n"
             "\tIt's time to die.\n"
@@ -62,21 +89,21 @@ static void do_not_move(void *const a,
         exit(1);
     }
     param_t p = {
-        .a = a + n1 * s,
+        .a = a + n12 * s,
         .tmp = tmp,
         .s = s,
         .is_unordered = is_unordered
     };
-    const void *lp = tmp, *rp = a + n1 * s;
+    const void *lp = tmp, *rp = a + n12 * s;
     void *res = a;
-    if (n2 > 1 && do_not_move_with_tmp(&p, 0, n2))
-        memcpy((void *)rp, tmp, n2 * s), moves += n2;
+    if (n34 > 1 && do_not_move_with_tmp(&p, 0, n34))
+        memcpy((void *)rp, tmp, n34 * s), moves += n34;
     p.a = a;
-    if (n1 < 2 || !do_not_move_with_tmp(&p, 0, n1))
-        memcpy(tmp, a, n1 * s), moves += n1;
-    M_E_R_G_E
-    moves += n - n2;
-    if (n1 > 0) memcpy(res, lp, n1 * s);
+    if (n12 < 2 || !do_not_move_with_tmp(&p, 0, n12))
+        memcpy(tmp, a, n12 * s), moves += n12;
+    M_E_R_G_E(n12, n34)
+    moves += n - n34;
+    if (n12 > 0) memcpy(res, lp, n12 * s);
     free(tmp);
 }
 
@@ -84,9 +111,9 @@ static void do_not_move(void *const a,
 bool NAME(const void *const lvp, const void *const rvp)
 
 #define _(CND) \
-    if (__builtin_expect(!!(CND), 0)) { \
+    if (unlikely(CND)) { \
         fprintf(stderr, "\n\t🤔, line: %d\n\n", __LINE__); \
-        return 1; \
+        exit(1); \
     }
 
 static int cmp(const void *_a, const void *_b) {
