@@ -94,13 +94,36 @@ static void do_not_move(void *const a,
         .s = s,
         .is_unordered = is_unordered
     };
-    const void *lp = tmp, *rp = a + n12 * s;
-    void *res = a;
-    if (n34 > 1 && do_not_move_with_tmp(&p, 0, n34))
-        memcpy((void *)rp, tmp, n34 * s), moves += n34;
+    const void *lp, *rp;
+    void *res;
+    {
+        size_t n3 = n34 / 2, n4 = n34 - n3;
+        const bool rb = n4 > 1 && do_not_move_with_tmp(&p, n3 * s, n4);
+        if (!(n3 > 1 && do_not_move_with_tmp(&p, 0, n3)))
+            memcpy(tmp, p.a, n3 * s), moves += n3;
+        lp = tmp, rp = (rb ? tmp : p.a) + n3 * s, res = p.a;
+        M_E_R_G_E(n3, n4)
+        moves += n34 - n4;
+        if (n3 > 0)
+            memcpy(res, lp, n3 * s);
+        else if (rb)
+            memcpy(res, rp, n4 * s), moves += n4;
+    }
     p.a = a;
-    if (n12 < 2 || !do_not_move_with_tmp(&p, 0, n12))
-        memcpy(tmp, a, n12 * s), moves += n12;
+    {
+        size_t n1 = n12 / 2, n2 = n12 - n1;
+        const bool rb = n2 > 1 && do_not_move_with_tmp(&p, n1 * s, n2);
+        if (n1 > 1 && do_not_move_with_tmp(&p, 0, n1))
+            memcpy(a, tmp, n1 * s), moves += n1;
+        lp = a, rp = (rb ? tmp : a) + n1 * s, res = tmp;
+        M_E_R_G_E(n1, n2)
+        moves += n12 - n2;
+        if (n1 > 0)
+            memcpy(res, lp, n1 * s);
+        else if (!rb)
+            memcpy(res, rp, n2 * s), moves += n2;
+    }
+    lp = tmp, rp = a + n12 * s, res = a;
     M_E_R_G_E(n12, n34)
     moves += n - n34;
     if (n12 > 0) memcpy(res, lp, n12 * s);
